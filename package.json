@@ -1,0 +1,40 @@
+{
+  "name": "plex-slack-agent",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Slack App used query a Plex Server, using an LLM and a plex mcp to translate natural language to Plex API calls. ",
+  "main": "index.ts",
+  "scripts": {
+    "test": "test",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "ngrok": "ngrok http 8080",
+    "ngrok:auth": "node scripts/ngrok-auth.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/samdaw13/plex-slack-app.git"
+  },
+  "author": "Sam Daw",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/samdaw13/plex-slack-app/issues"
+  },
+  "homepage": "https://github.com/samdaw13/plex-slack-app#readme",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.22.0",
+    "@slack/bolt": "^4.6.0",
+    "dotenv": "^17.2.3",
+    "eventsource": "^4.1.0",
+    "ngrok": "^5.0.0-beta.2",
+    "openai": "^6.9.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}
