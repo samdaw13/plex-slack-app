@@ -1,3 +1,5 @@
+import { log } from "./logger";
+
 export interface McpTool {
   name: string;
   description: string;
@@ -26,11 +28,11 @@ const fetchTools = async () => {
  */
 export async function initializeMcpClient(): Promise<void> {
   if (isInitialized) {
-    console.log("⚠️  MCP client already initialized");
+    log.warn("⚠️  MCP client already initialized");
     return;
   }
 
-  console.log(`🔌 Connecting to Plex MCP server at ${MCP_URL}...`);
+  log.info(`🔌 Connecting to Plex MCP server at ${MCP_URL}...`);
 
   // Test connection by listing tools
   try {
@@ -38,13 +40,13 @@ export async function initializeMcpClient(): Promise<void> {
 
     if (response.ok) {
       isInitialized = true;
-      console.log("✅ Connected to Plex MCP server");
+      log.info("✅ Connected to Plex MCP server");
     } else {
       const text = await response.text();
       throw new Error(`Connection failed: HTTP ${response.status} - ${text}`);
     }
   } catch (error) {
-    console.error("Failed to connect to MCP server:", error);
+    log.error("Failed to connect to MCP server:", error as Error);
     throw error;
   }
 }
@@ -57,7 +59,7 @@ function ensureInitialized(): void {
 
 export async function listTools(): Promise<McpTool[]> {
   ensureInitialized();
-  console.log("📋 Fetching tools from MCP server...");
+  log.debug("📋 Fetching tools from MCP server...");
 
   const httpResponse = await fetchTools();
 
@@ -67,17 +69,16 @@ export async function listTools(): Promise<McpTool[]> {
 
   const tools: McpTool[] = await httpResponse.json() as McpTool[];
 
-  console.log(`📋 Found ${tools.length} tools`);
-  console.log(`  - Read-only: ${tools.filter(t => t.access === "read").length}`);
-  console.log(`  - Write/Modify: ${tools.filter(t => t.access === "write").length}`);
+  log.info(`📋 Found ${tools.length} tools`);
+  log.debug(`  - Read-only: ${tools.filter(t => t.access === "read").length}`);
+  log.debug(`  - Write/Modify: ${tools.filter(t => t.access === "write").length}`);
   return tools;
 }
 
 export async function callTool(name: string, args: Record<string, any>): Promise<any> {
   ensureInitialized();
 
-  console.log(`🔧 Calling tool: ${name}`);
-  console.log(`📥 Args:`, JSON.stringify(args, null, 2));
+  log.info(`🔧 Calling tool: ${name}`, { args });
 
   const httpResponse = await fetch(`${MCP_URL}/tools/call`, {
     method: 'POST',
@@ -102,5 +103,5 @@ export async function callTool(name: string, args: Record<string, any>): Promise
 // Cleanup function
 export async function disconnect(): Promise<void> {
   isInitialized = false;
-  console.log("🔌 Disconnected from Plex MCP server");
+  log.info("🔌 Disconnected from Plex MCP server");
 }

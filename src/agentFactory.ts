@@ -1,7 +1,7 @@
 import { listTools, McpTool, callTool } from "./mcpClient";
 import OpenAI from "openai";
 import dotenv from "dotenv";
-
+import { log } from "./logger";
 
 dotenv.config();
 
@@ -76,7 +76,12 @@ function simplifySchema(schema: any): any {
   return simplified;
 }
 
-export async function runAgent(prompt: string, access: "read" | "write", userEmail?: string | null): Promise<string> {
+export async function runAgent(
+  prompt: string,
+  access: "read" | "write",
+  userEmail?: string | null,
+  conversationHistory?: OpenAI.Chat.Completions.ChatCompletionMessageParam[]
+): Promise<string> {
   const toolDefs = await getToolsByAccess(access);
 
   const functions = toolDefs.map(tool => ({
@@ -86,19 +91,39 @@ export async function runAgent(prompt: string, access: "read" | "write", userEma
   }));
 
   // Build system message with user context
-  let systemMessage = `You are a Plex assistant. Only use ${access === "read" ? "read-only" : "write"} tools. When you use a tool, you must provide a natural language response based on the tool's results.`;
+  let systemMessage = `You are a Plex assistant. Only use ${access === "read" ? "read-only" : "write"} tools. When you use a tool, you must provide a natural language response based on the tool's results.
+
+FORMATTING RULES:
+Your responses will be displayed in Slack. Use Slack's markdown formatting:
+- Bold: *text* (single asterisks, NOT double)
+- Italic: _text_ (underscores)
+- Strikethrough: ~text~ (tildes)
+- Code: \`text\` (backticks)
+- Code block: \`\`\`text\`\`\` (triple backticks)
+- Blockquote: > text (greater-than sign at start of line)
+- Lists: Use • or numbered lists (1. , 2. , etc.)
+- Links: <url|link text> or just <url>
+
+IMPORTANT: Never use **double asterisks** for bold - always use *single asterisks* in Slack.`;
 
   if (userEmail) {
-    console.log(`👤 User context: ${userEmail}`);
-    systemMessage += `\n\nIMPORTANT: The user asking this question has the email address: ${userEmail}. When querying Plex data about "the user" or using user-specific tools, you should match this email with the appropriate Plex username from the user list. Use the user_search_users tool to find the matching Plex username for this email, then use that username for subsequent user-specific queries.`;
+    log.info(`👤 User context: ${userEmail}`);
+    systemMessage += `\n\nUSER CONTEXT: The user asking this question has the email address: ${userEmail}. When querying Plex data about "the user" or using user-specific tools, you should match this email with the appropriate Plex username from the user list. Use the user_search_users tool to find the matching Plex username for this email, then use that username for subsequent user-specific queries.`;
   } else {
-    console.log(`👤 No user context available - will use server owner's data`);
+    log.info(`👤 No user context available - will use server owner's data`);
   }
 
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: "system", content: systemMessage },
+    // Include conversation history if provided
+    ...(conversationHistory || []),
+    // Add current user message
     { role: "user", content: prompt }
   ];
+
+  if (conversationHistory && conversationHistory.length > 0) {
+    log.debug(`Using conversation history: ${conversationHistory.length} previous messages`);
+  }
 
   const MAX_ITERATIONS = 10;
   let iterations = 0;
@@ -115,7 +140,12 @@ export async function runAgent(prompt: string, access: "read" | "write", userEma
 
     const message = response.choices[0].message;
 
-    console.log(`Iteration ${iterations}:`, message);
+    log.debug(`Iteration ${iterations}`, {
+      role: message.role,
+      hasContent: !!message.content,
+      hasFunctionCall: !!message.function_call,
+      functionName: message.function_call?.name
+    });
 
     // If there's no function call, we have a final answer
     if (!message.function_call) {
@@ -127,7 +157,7 @@ export async function runAgent(prompt: string, access: "read" | "write", userEma
     const args = JSON.parse(argsStr as string);
     const result = await callTool(name, args);
 
-    console.log(`Tool ${name} result:`, result);
+    log.debug(`Tool ${name} completed`);
 
     // Add the assistant's function call to the conversation
     messages.push({

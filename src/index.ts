@@ -2,6 +2,9 @@ import { App, Assistant } from "@slack/bolt";
 import dotenv from "dotenv";
 import { runAgent } from "./agentFactory";
 import { initializeMcpClient } from "./mcpClient";
+import { log } from "./logger";
+import { getThreadHistory } from "./threadHistory";
+import { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 
 dotenv.config();
 
@@ -20,37 +23,77 @@ const assistant = new Assistant({
 
       await saveThreadContext();
     } catch (error) {
-      console.error("Error in threadStarted:", error);
+      log.error("Error in threadStarted:", error as Error);
     }
   },
 
-  userMessage: async ({ message, say, setStatus, setSuggestedPrompts, client }) => {
+  userMessage: async ({ message, say, setStatus, setSuggestedPrompts, client, context, payload, getThreadContext }) => {
     try {
-      // @ts-ignore - message has text
-      const prompt = message.text?.trim();
+      
+      const prompt = 'text' in message && message.text?.trim();
 
       if (!prompt) {
         return;
       }
 
-      console.log(message)
+      if (message.subtype === undefined) {
+        log.debug("Received message from Assistant", {
+          text: message.text,
+          user: message.user,
+        });
+      }
 
       // Get user info to match with Plex user
       let userEmail = null;
       try {
-        // @ts-ignore - message has user_id
+        if (!('user' in message) || !message.user) throw Error("Message does not contain user property")
         const userInfo = await client.users.info({ user: message.user });
-        console.log(userInfo)
+        log.debug("User info retrieved", {
+          email: userInfo.user?.profile?.email,
+          name: userInfo.user?.real_name
+        });
         userEmail = userInfo.user?.profile?.email;
       } catch (err) {
-        console.error("Could not fetch user email:", err);
+        log.error("Could not fetch user email:", err as Error);
+      }
+
+      // Get thread context from Assistant API
+      const threadContext = await getThreadContext();
+
+      // Fetch thread history for context
+      log.debug("Assistant context info", {
+        payloadKeys: Object.keys(payload),
+        messageKeys: Object.keys(message),
+        threadContext: threadContext,
+        channel: payload.channel
+      });
+
+      // @ts-ignore - try multiple possible field names
+      const channelId = payload.channel_id || payload.channelId || payload.channel || message.channel;
+      const threadTs = 'thread_ts' in payload ?  payload.thread_ts : threadContext?.channel_id;
+
+      let conversationHistory: ChatCompletionMessageParam[] = [];
+      if (channelId && threadTs && context.botUserId) {
+        conversationHistory = await getThreadHistory(
+          client,
+          channelId,
+          threadTs,
+          context.botUserId
+        );
+      } else {
+        log.warn("Cannot fetch thread history - missing channel, thread, or bot user I info", {
+          channelId,
+          threadTs,
+          botUserId: context.botUserId,
+          availablePayloadKeys: Object.keys(payload)
+        });
       }
 
       // Set status while processing
       await setStatus("Fetching information to provide a complete response...");
 
-      // Run the agent with user context
-      const reply = await runAgent(prompt, "read", userEmail);
+      // Run the agent with user context and conversation history
+      const reply = await runAgent(prompt, "read", userEmail, conversationHistory);
 
       // Send the response
       await say({
@@ -66,7 +109,7 @@ const assistant = new Assistant({
         ]
       });
     } catch (error) {
-      console.error("Error in userMessage:", error);
+      log.error("Error in userMessage:", error as Error);
       await say({
         text: "Sorry, I encountered an error processing your request."
       });
@@ -78,7 +121,7 @@ const assistant = new Assistant({
 app.assistant(assistant);
 
 // Handle @mentions in channels (separate from Assistant tab)
-app.event("app_mention", async ({ event, say, client }) => {
+app.event("app_mention", async ({ event, say, client, context }) => {
   try {
     // Remove the bot mention from the message
     const prompt = event.text.replace(/<@[A-Z0-9]+>/g, "").trim();
@@ -94,10 +137,22 @@ app.event("app_mention", async ({ event, say, client }) => {
     // Get user info to match with Plex user
     let userEmail = null;
     try {
+      if (!('user' in event) || !event.user) throw Error("Message does not contain user property")
       const userInfo = await client.users.info({ user: event.user });
       userEmail = userInfo.user?.profile?.email;
     } catch (err) {
-      console.error("Could not fetch user email:", err);
+      log.error("Could not fetch user email:", err as Error);
+    }
+
+    // Fetch thread history if this is a threaded conversation
+    let conversationHistory: ChatCompletionMessageParam[] = [];
+    if (event.thread_ts && context.botUserId) {
+      conversationHistory = await getThreadHistory(
+        client,
+        event.channel,
+        event.thread_ts,
+        context.botUserId
+      );
     }
 
     // Set status while processing (only if in a thread, not for top-level messages)
@@ -109,11 +164,11 @@ app.event("app_mention", async ({ event, say, client }) => {
       });
     } catch (statusError) {
       // Ignore status errors - not all messages support this
-      console.log("Could not set status (this is normal for top-level messages)");
+      log.debug("Could not set status (this is normal for top-level messages)");
     }
 
-    // Run the agent with user context
-    const reply = await runAgent(prompt, "read", userEmail);
+    // Run the agent with user context and conversation history
+    const reply = await runAgent(prompt, "read", userEmail, conversationHistory);
 
     // Clear status
     try {
@@ -132,7 +187,7 @@ app.event("app_mention", async ({ event, say, client }) => {
       thread_ts: event.ts
     });
   } catch (error) {
-    console.error("Error in app_mention:", error);
+    log.error("Error in app_mention:", error as Error);
     await say({
       text: "Sorry, I encountered an error processing your request.",
       thread_ts: event.ts
@@ -157,12 +212,7 @@ app.command("/plex", async ({ command, ack, respond }) => {
       await respond(`Unknown subcommand: ${subcommand}`);
     }
   } catch (error) {
-    console.log("ERROR!!!")
-    console.error(error)
-    if (error instanceof Error) {
-      console.error("Error message:", error.message);
-      console.error("Error stack trace:", error.stack);
-    }
+    log.error("Error in /plex command:", error as Error);
   }
 });
 
@@ -171,6 +221,7 @@ app.command("/plex", async ({ command, ack, respond }) => {
   await initializeMcpClient();
 
   // Then start the Slack app
-  await app.start(parseInt(process.env.PORT || "3000"));
-  console.log("⚡ Plex Slack Bot is running!");
+  const port = parseInt(process.env.PORT || "3000");
+  await app.start(port);
+  log.info(`⚡ Plex Slack Bot is running on port ${port}!`);
 })();
