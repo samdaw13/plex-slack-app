@@ -11,6 +11,7 @@ services:
       - SLACK_CLIENT_SECRET=${SLACK_CLIENT_SECRET}
       - SLACK_SIGNING_SECRET=${SLACK_SIGNING_SECRET}
       - PORT=${PORT:-8080}
+      - MCP_SERVER_URL=${MCP_SERVER_URL:-http://localhost:3001}
     ports:
       - "${PORT:-8080}:${PORT:-8080}"
     volumes:

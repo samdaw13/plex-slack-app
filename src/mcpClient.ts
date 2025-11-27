@@ -9,7 +9,7 @@ export interface McpTool {
   access: "read" | "write" | "delete";
 }
 
-const MCP_URL = process.env.MCP_URL || "http://localhost:3001";
+const MCP_URL = process.env.MCP_SERVER_URL || "http://localhost:3001";
 let isInitialized = false;
 
 const fetchTools = async () => {
