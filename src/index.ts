@@ -1,9 +1,9 @@
 import { App, Assistant } from "@slack/bolt";
 import dotenv from "dotenv";
-import { runAgent } from "./agentFactory";
-import { initializeMcpClient } from "./mcpClient";
-import { log } from "./logger";
-import { getThreadHistory } from "./threadHistory";
+import { runAgent } from "./agentFactory.js";
+import { initializeMcpClient } from "./mcpClient.js";
+import { log } from "./logger.js";
+import { getThreadHistory } from "./threadHistory.js";
 import { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 
 dotenv.config();
