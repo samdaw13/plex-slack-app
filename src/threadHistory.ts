@@ -1,5 +1,5 @@
 import { WebClient } from "@slack/web-api";
-import { log } from "./logger";
+import { log } from "./logger.js";
 import OpenAI from "openai";
 
 interface SlackMessage {

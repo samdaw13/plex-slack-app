@@ -1,0 +1,45 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: plex-slack-agent
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN}
+      - SLACK_CLIENT_ID=${SLACK_CLIENT_ID}
+      - SLACK_CLIENT_SECRET=${SLACK_CLIENT_SECRET}
+      - SLACK_SIGNING_SECRET=${SLACK_SIGNING_SECRET}
+      - PORT=${PORT:-8080}
+    ports:
+      - "${PORT:-8080}:${PORT:-8080}"
+    volumes:
+      - app-logs:/var/log/plex-slack-agent
+    networks:
+      - plex-network
+    restart: unless-stopped
+
+  ngrok:
+    image: ngrok/ngrok:latest
+    container_name: plex-slack-ngrok
+    command:
+      - "http"
+      - "app:${PORT:-8080}"
+      - "--authtoken=${NGROK_TOKEN}"
+    environment:
+      - NGROK_AUTHTOKEN=${NGROK_TOKEN}
+    ports:
+      - "4040:4040"  # ngrok web interface
+    networks:
+      - plex-network
+    depends_on:
+      - app
+    restart: unless-stopped
+
+networks:
+  plex-network:
+    driver: bridge
+
+volumes:
+  app-logs:
+    driver: local

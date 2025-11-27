@@ -1,7 +1,7 @@
-import { listTools, callTool } from "./mcpClient";
+import { listTools, callTool } from "./mcpClient.js";
 import OpenAI from "openai";
 import dotenv from "dotenv";
-import { log } from "./logger";
+import { log } from "./logger.js";
 
 dotenv.config();
 
