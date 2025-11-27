@@ -1,4 +1,4 @@
-import { listTools, McpTool, callTool } from "./mcpClient";
+import { listTools, callTool } from "./mcpClient";
 import OpenAI from "openai";
 import dotenv from "dotenv";
 import { log } from "./logger";

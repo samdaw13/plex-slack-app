@@ -68,7 +68,7 @@ const assistant = new Assistant({
         channel: payload.channel
       });
 
-      // @ts-ignore - try multiple possible field names
+      // @ts-expect-error - try multiple possible field names
       const channelId = payload.channel_id || payload.channelId || payload.channel || message.channel;
       const threadTs = 'thread_ts' in payload ?  payload.thread_ts : threadContext?.channel_id;
 
@@ -162,7 +162,7 @@ app.event("app_mention", async ({ event, say, client, context }) => {
         thread_ts: event.ts,
         status: "Fetching information to provide a complete response..."
       });
-    } catch (statusError) {
+    } catch {
       // Ignore status errors - not all messages support this
       log.debug("Could not set status (this is normal for top-level messages)");
     }
@@ -177,7 +177,7 @@ app.event("app_mention", async ({ event, say, client, context }) => {
         thread_ts: event.ts,
         status: ""
       });
-    } catch (statusError) {
+    } catch {
       // Ignore status errors
     }
 
